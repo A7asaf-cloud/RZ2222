@@ -1950,6 +1950,7 @@ function PortfolioSection() {
   const [apiKey,    setApiKey]    = useState(()=>lsGet(LS.FINNHUB,''));
   const [keyInput,  setKeyInput]  = useState('');
   const [showKey,   setShowKey]   = useState(false);
+  const [showKeyText, setShowKeyText] = useState(false);
   const [livePrices,setLivePrices]= useState({});
   const [dayChanges,setDayChanges]= useState({});
   const [usdIls,    setUsdIls]    = useState(DEFAULT_USD_ILS);
@@ -2157,15 +2158,27 @@ function PortfolioSection() {
             ))}
           </div>
 
-          <div style={{display:'flex',gap:8}}>
-            <input type="password" value={keyInput} onChange={e=>setKeyInput(e.target.value)}
-                   onKeyDown={e=>e.key==='Enter'&&saveKey()}
-                   placeholder="c_xxxxxxxxxxxxxxxxxxxxxxxx"
-                   autoComplete="new-password" autoCorrect="off" autoCapitalize="off" spellCheck="false"
-                   style={{flex:1,background:'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.3)',
-                           borderRadius:12,padding:'12px 14px',color:'white',fontSize:14,
-                           direction:'ltr',fontFamily:'monospace',outline:'none'}}
-                   autoFocus/>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            <div style={{flex:1,display:'flex',gap:6,minWidth:0}}>
+              <input type={showKeyText?'text':'password'} value={keyInput} onChange={e=>setKeyInput(e.target.value)}
+                     onKeyDown={e=>e.key==='Enter'&&saveKey()}
+                     placeholder="c_xxxxxxxxxxxxxxxxxxxxxxxx"
+                     autoComplete="new-password" autoCorrect="off" autoCapitalize="off" spellCheck="false"
+                     style={{flex:1,background:'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.3)',
+                             borderRadius:12,padding:'12px 14px',color:'white',fontSize:14,
+                             direction:'ltr',fontFamily:'monospace',outline:'none',minWidth:0}}
+                     autoFocus/>
+              <button onClick={()=>setShowKeyText(v=>!v)}
+                      style={{background:'rgba(255,255,255,.15)',border:'none',borderRadius:10,
+                              padding:'0 12px',color:'white',fontSize:18,cursor:'pointer',flexShrink:0}}>
+                {showKeyText?'🙈':'👁'}
+              </button>
+              <button onClick={async()=>{try{const t=await navigator.clipboard.readText();setKeyInput(t.trim());}catch{}}}
+                      style={{background:'rgba(255,255,255,.15)',border:'none',borderRadius:10,
+                              padding:'0 12px',color:'white',fontSize:18,cursor:'pointer',flexShrink:0}}>
+                📋
+              </button>
+            </div>
             <button onClick={saveKey} disabled={!keyInput.trim()}
                     style={{background:'#22C55E',border:'none',borderRadius:12,padding:'12px 20px',
                             color:'white',fontWeight:800,fontSize:15,cursor:'pointer',
