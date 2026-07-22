@@ -1032,11 +1032,11 @@ async function callGemini(file, docType, apiKey) {
           const raw = e?.error?.message || '';
           if (r.status === 400) msg = `בקשה לא תקינה — ${raw||'בדוק את הקובץ ונסה שוב'}`;
           else if (r.status === 401 || r.status === 403) msg = `מפתח API לא תקין — צור מפתח חדש ב-aistudio.google.com`;
-          else if (r.status === 429) msg = 'הגעת למגבלת הבקשות — נסה שוב בעוד דקה';
+          else if (r.status === 429) { lastErr = new Error(`429 מגבלת בקשות ב-${model}`); continue; }
           else if (r.status === 404) { lastErr = new Error(`model not found: ${model}`); continue; }
           else msg = raw || msg;
         } catch {}
-        if (r.status !== 404) throw new Error(msg);
+        if (r.status !== 404 && r.status !== 429) throw new Error(msg);
         continue;
       }
 
@@ -1050,6 +1050,8 @@ async function callGemini(file, docType, apiKey) {
       throw e;
     }
   }
+  const lastMsg = lastErr?.message || '';
+  if (lastMsg.includes('429')) throw new Error('הגעת למגבלת הבקשות החינמיות — המתן דקה ונסה שוב');
   throw lastErr || new Error('כל המודלים נכשלו — בדוק שהמפתח תקין ב-aistudio.google.com');
 }
 
