@@ -952,7 +952,15 @@ function parseBankOCR(text) {
 async function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = e => resolve({ data: e.target.result.split(',')[1], mime: file.type });
+    reader.onload = e => {
+      const dataUrl = e.target.result;
+      const data = dataUrl.split(',')[1];
+      // Gemini supports: jpeg, png, gif, webp — fallback to jpeg for unknown types
+      const SUPPORTED = ['image/jpeg','image/jpg','image/png','image/gif','image/webp'];
+      let mime = file.type || '';
+      if (!SUPPORTED.includes(mime)) mime = 'image/jpeg';
+      resolve({ data, mime });
+    };
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
@@ -1008,8 +1016,11 @@ async function callGemini(file, docType, apiKey) {
   const models = [
     'gemini-2.0-flash-lite',
     'gemini-2.0-flash',
+    'gemini-2.0-flash-exp',
     'gemini-1.5-flash',
     'gemini-1.5-flash-latest',
+    'gemini-1.5-flash-8b',
+    'gemini-1.5-pro',
   ];
   let lastErr = null;
 
@@ -1030,13 +1041,13 @@ async function callGemini(file, docType, apiKey) {
         try {
           const e = await r.json();
           const raw = e?.error?.message || '';
-          if (r.status === 400) msg = `בקשה לא תקינה — ${raw||'בדוק את הקובץ ונסה שוב'}`;
+          if (r.status === 400) { lastErr = new Error(`400: ${raw||'בקשה לא תקינה'}`); continue; }
           else if (r.status === 401 || r.status === 403) msg = `מפתח API לא תקין — צור מפתח חדש ב-aistudio.google.com`;
           else if (r.status === 429) { lastErr = new Error(`429 מגבלת בקשות ב-${model}`); continue; }
           else if (r.status === 404) { lastErr = new Error(`model not found: ${model}`); continue; }
           else msg = raw || msg;
         } catch {}
-        if (r.status !== 404 && r.status !== 429) throw new Error(msg);
+        if (r.status !== 404 && r.status !== 429 && r.status !== 400) throw new Error(msg);
         continue;
       }
 
@@ -1112,9 +1123,9 @@ function ScreenshotImport({onImport, onUpdateInvestment}) {
     if (!key) return;
     setKeyTesting(true); setKeyStatus(null); setKeyErrMsg('');
     try {
-      const models = ['gemini-1.5-flash','gemini-2.0-flash','gemini-1.5-flash-latest'];
+      const MODELS = ['gemini-2.0-flash-lite','gemini-2.0-flash','gemini-2.0-flash-exp','gemini-1.5-flash','gemini-1.5-flash-latest','gemini-1.5-flash-8b','gemini-1.5-pro'];
       let ok = false;
-      for (const model of models) {
+      for (const model of MODELS) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
         const r = await fetch(url, {
           method:'POST',
@@ -1125,17 +1136,16 @@ function ScreenshotImport({onImport, onUpdateInvestment}) {
           })
         });
         if (r.ok) { ok = true; break; }
-        if (r.status === 404) continue;
+        if (r.status === 404 || r.status === 400 || r.status === 429) continue;
         const e = await r.json().catch(()=>({}));
         const raw = e?.error?.message || '';
-        if (r.status === 400 || r.status === 401 || r.status === 403) {
+        if (r.status === 401 || r.status === 403) {
           setKeyErrMsg(`מפתח לא תקין (${r.status}) — ודא שהמפתח הוא מ-aistudio.google.com`);
           setKeyStatus('error'); setKeyTesting(false); return;
         }
         setKeyErrMsg(`שגיאה ${r.status}: ${raw}`); setKeyStatus('error'); setKeyTesting(false); return;
       }
       if (ok) {
-        // Save immediately — no useEffect needed
         lsSet(LS.GEMINI, key);
         setApiKey(key);
         setKeyInput('');
@@ -1143,7 +1153,7 @@ function ScreenshotImport({onImport, onUpdateInvestment}) {
         setKeyStatus('ok');
         setKeyErrMsg('');
       } else {
-        setKeyErrMsg('המודלים לא זמינים — נסה שוב');
+        setKeyErrMsg('לא נמצא מודל זמין — ודא שה-API מופעל בחשבון');
         setKeyStatus('error');
       }
     } catch(e) {
@@ -1157,9 +1167,9 @@ function ScreenshotImport({onImport, onUpdateInvestment}) {
     if (!apiKey) return;
     setKeyTesting(true); setKeyStatus(null); setKeyErrMsg('');
     try {
-      const models = ['gemini-1.5-flash','gemini-2.0-flash','gemini-1.5-flash-latest'];
+      const MODELS = ['gemini-2.0-flash-lite','gemini-2.0-flash','gemini-2.0-flash-exp','gemini-1.5-flash','gemini-1.5-flash-latest','gemini-1.5-flash-8b','gemini-1.5-pro'];
       let ok = false;
-      for (const model of models) {
+      for (const model of MODELS) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
         const r = await fetch(url, {
           method:'POST',
@@ -1170,13 +1180,13 @@ function ScreenshotImport({onImport, onUpdateInvestment}) {
           })
         });
         if (r.ok) { ok = true; break; }
-        if (r.status === 404) continue;
+        if (r.status === 404 || r.status === 400 || r.status === 429) continue;
         const e = await r.json().catch(()=>({}));
         const raw = e?.error?.message || '';
         setKeyErrMsg(`שגיאה ${r.status}: ${raw}`); setKeyStatus('error'); setKeyTesting(false); return;
       }
       if (ok) { setKeyStatus('ok'); }
-      else { setKeyErrMsg('המודלים לא זמינים'); setKeyStatus('error'); }
+      else { setKeyErrMsg('לא נמצא מודל זמין — ודא שה-API מופעל בחשבון'); setKeyStatus('error'); }
     } catch(e) {
       setKeyErrMsg('שגיאת רשת: ' + e.message); setKeyStatus('error');
     }
