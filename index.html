@@ -516,8 +516,18 @@ function Onboarding({onDone}) {
 }
 
 /* ── TRANSACTION ROW ── */
-function TxRow({tx,isNew}) {
+const ALL_CATS = [...CAT_RULES.map(r=>({cat:r.cat,color:r.color,emoji:r.emoji})), DEF_CAT];
+
+function TxRow({tx,isNew,onCatChange}) {
+  const [editing,setEditing]=useState(false);
   const pos=tx.amount>=0;
+
+  function handleCatSelect(e) {
+    const chosen = ALL_CATS.find(c=>c.cat===e.target.value);
+    if (chosen && onCatChange) onCatChange(tx.id, chosen);
+    setEditing(false);
+  }
+
   return (
     <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',
                  borderBottom:'1px solid #f3f4f6',background:isNew?'#f0fdf4':'white',
@@ -531,8 +541,24 @@ function TxRow({tx,isNew}) {
                    overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tx.description}</p>
         <div style={{display:'flex',alignItems:'center',gap:8,marginTop:3}}>
           <span style={{fontSize:11,color:'#9CA3AF'}}>{fmtDate(tx.date)}</span>
-          <span style={{background:tx.color+'22',color:tx.color,borderRadius:6,
-                        padding:'1px 7px',fontSize:11,fontWeight:700}}>{tx.cat}</span>
+          {editing
+            ? <select autoFocus onBlur={()=>setEditing(false)} onChange={handleCatSelect}
+                      defaultValue={tx.cat}
+                      style={{fontSize:12,borderRadius:6,border:'1px solid #22C55E',padding:'2px 4px',
+                              background:'white',color:'#111',cursor:'pointer'}}>
+                {ALL_CATS.map(c=>(
+                  <option key={c.cat} value={c.cat}>{c.emoji} {c.cat}</option>
+                ))}
+              </select>
+            : <span onClick={()=>onCatChange&&setEditing(true)}
+                    style={{background:tx.color+'22',color:tx.color,borderRadius:6,
+                            padding:'1px 7px',fontSize:11,fontWeight:700,
+                            cursor:onCatChange?'pointer':'default',
+                            userSelect:'none'}}
+                    title={onCatChange?'לחץ לשינוי קטגוריה':undefined}>
+                {tx.cat}{onCatChange?' ✎':''}
+              </span>
+          }
         </div>
       </div>
       <span style={{fontSize:15,fontWeight:700,color:pos?'#16a34a':'#dc2626',flexShrink:0}}>
@@ -824,7 +850,7 @@ function Dashboard({profile,txs,onAdd,budgetPlan,daysToCredit,daysToSalary}) {
 }
 
 /* ── TRANSACTIONS TAB ── */
-function TransactionsTab({txs,onAdd,onDelete}) {
+function TransactionsTab({txs,onAdd,onDelete,onUpdateTx}) {
   const [showAdd,setShowAdd]=useState(false);
   const [search,setSearch]=useState('');
   const [filter,setFilter]=useState('all');
@@ -859,7 +885,7 @@ function TransactionsTab({txs,onAdd,onDelete}) {
       <div className="card" style={{borderRadius:0,border:'none',borderTop:'1px solid #e5e7eb'}}>
         {filtered.length===0
           ? <p style={{textAlign:'center',color:'#9CA3AF',padding:'40px',fontSize:14}}>אין עסקאות</p>
-          : filtered.map(tx=><TxRow key={tx.id} tx={tx}/>)
+          : filtered.map(tx=><TxRow key={tx.id} tx={tx} onCatChange={onUpdateTx}/>)
         }
       </div>
 
@@ -979,8 +1005,12 @@ async function callGemini(file, docType, apiKey) {
 
   const { data, mime } = await fileToBase64(file);
 
-  // Try gemini-2.0-flash first, fall back to 1.5-flash
-  const models = ['gemini-1.5-flash','gemini-2.0-flash','gemini-1.5-flash-latest'];
+  const models = [
+    'gemini-2.0-flash-lite',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-latest',
+  ];
   let lastErr = null;
 
   for (const model of models) {
@@ -990,7 +1020,7 @@ async function callGemini(file, docType, apiKey) {
         { text: GEMINI_PROMPTS[docType] || GEMINI_PROMPTS.bank },
         { inline_data: { mime_type: mime, data } }
       ]}],
-      generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
+      generationConfig: { temperature: 0.1 },
     };
     try {
       const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
@@ -1000,26 +1030,27 @@ async function callGemini(file, docType, apiKey) {
         try {
           const e = await r.json();
           const raw = e?.error?.message || '';
-          if (r.status === 400) msg = `מפתח API לא תקין — ודא שהמפתח הוא מ-aistudio.google.com (${raw})`;
-          else if (r.status === 403) msg = `אין הרשאה — ייתכן שה-API לא מופעל בחשבון (${raw})`;
+          if (r.status === 400) msg = `בקשה לא תקינה — ${raw||'בדוק את הקובץ ונסה שוב'}`;
+          else if (r.status === 401 || r.status === 403) msg = `מפתח API לא תקין — צור מפתח חדש ב-aistudio.google.com`;
           else if (r.status === 429) msg = 'הגעת למגבלת הבקשות — נסה שוב בעוד דקה';
           else if (r.status === 404) { lastErr = new Error(`model not found: ${model}`); continue; }
           else msg = raw || msg;
         } catch {}
-        throw new Error(msg);
+        if (r.status !== 404) throw new Error(msg);
+        continue;
       }
 
       const d = await r.json();
       const text = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      if (!text) throw new Error('Gemini החזיר תשובה ריקה — נסה שוב');
+      if (!text) { lastErr = new Error('Gemini החזיר תשובה ריקה'); continue; }
       return extractJSONFromText(text);
 
     } catch (e) {
-      if (e.message.includes('model not found')) { lastErr = e; continue; }
+      if (e.message.includes('model not found') || e.message.includes('MODEL_NOT_FOUND')) { lastErr = e; continue; }
       throw e;
     }
   }
-  throw lastErr || new Error('כל הדגמים נכשלו');
+  throw lastErr || new Error('כל המודלים נכשלו — בדוק שהמפתח תקין ב-aistudio.google.com');
 }
 
 /* ── KEREN/PENSION FORM — own component so hooks are valid ── */
@@ -3156,6 +3187,9 @@ function App() {
 
   function handleAdd(tx)  { setTxs(p=>[tx,...p]); }
   function handleImport(newTxs) { setTxs(p=>[...newTxs,...p]); }
+  function handleUpdateTx(id, {cat,color,emoji}) {
+    setTxs(p=>p.map(t=>t.id===id?{...t,cat,color,emoji}:t));
+  }
 
   function handleUpdateInv(result) {
     if (result.type==='keren' && result.value>0) {
@@ -3245,7 +3279,7 @@ function App() {
         {tab==='dashboard'   && <Dashboard     profile={profile} txs={txs} onAdd={handleAdd}
                                                budgetPlan={budgetPlan}
                                                daysToCredit={daysToCredit} daysToSalary={daysToSalary}/>}
-        {tab==='transactions'&& <TransactionsTab txs={txs} onAdd={handleAdd}/>}
+        {tab==='transactions'&& <TransactionsTab txs={txs} onAdd={handleAdd} onUpdateTx={handleUpdateTx}/>}
         {tab==='import'      && <ImportTab      onImport={handleImport} onUpdateInv={handleUpdateInv}/>}
         {tab==='investments' && <InvestmentsTab profile={profile}/>}
         {tab==='settings'    && <SettingsTab    profile={profile} onReset={handleReset}
