@@ -1012,17 +1012,27 @@ async function listGeminiModels(apiKey) {
   const k = encodeURIComponent(apiKey);
   for (const ver of ['v1beta','v1']) {
     try {
-      const r = await fetch(`https://generativelanguage.googleapis.com/${ver}/models?key=${k}&pageSize=100`);
+      const r = await fetch(`https://generativelanguage.googleapis.com/${ver}/models?key=${k}&pageSize=200`);
       if (!r.ok) continue;
       const d = await r.json();
       const list = (d.models || [])
-        .filter(m => m.supportedGenerationMethods?.includes('generateContent') &&
-                     (m.name.includes('flash') || m.name.includes('pro')) &&
-                     !m.name.includes('vision') && !m.name.includes('embedding'))
+        .filter(m =>
+          m.supportedGenerationMethods?.includes('generateContent') &&
+          !m.name.includes('embedding') &&
+          !m.name.includes('aqa') &&
+          !m.name.includes('retrieval')
+        )
         .map(m => m.name.replace('models/', ''))
         .sort((a,b) => {
-          const score = s => s.includes('2.5')?4:s.includes('2.0')?3:s.includes('1.5')?2:1;
-          return score(b) - score(a);
+          const score = s => {
+            if (s.includes('3.')) return 10;
+            if (s.includes('2.5')) return 5;
+            if (s.includes('2.0')) return 3;
+            return 1;
+          };
+          // prefer flash over pro (faster + cheaper)
+          const flashBonus = s => s.includes('flash') ? 0.5 : 0;
+          return (score(b)+flashBonus(b)) - (score(a)+flashBonus(a));
         });
       if (list.length) return list;
     } catch {}
@@ -1035,8 +1045,7 @@ async function callGemini(file, docType, apiKey) {
 
   const { data, mime } = await fileToBase64(file);
 
-  // Get available models dynamically, fall back to known list
-  const FALLBACK = ['gemini-2.5-flash','gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash','gemini-1.5-pro'];
+  const FALLBACK = ['gemini-2.5-flash','gemini-2.5-pro'];
   const dynamic = await listGeminiModels(apiKey).catch(()=>null);
   const models = (dynamic && dynamic.length) ? dynamic : FALLBACK;
 
@@ -1142,11 +1151,11 @@ function ScreenshotImport({onImport, onUpdateInvestment}) {
     if (!key) return;
     setKeyTesting(true); setKeyStatus(null); setKeyErrMsg('');
     try {
-      const FALLBACK = ['gemini-2.5-flash','gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash','gemini-1.5-pro'];
+      const FALLBACK = ['gemini-2.5-flash','gemini-2.5-pro'];
       const dynamic = await listGeminiModels(key).catch(()=>null);
       const MODELS = (dynamic && dynamic.length) ? dynamic : FALLBACK;
       const ek = encodeURIComponent(key);
-      let ok = false;
+      let ok = false; let lastTestErr = '';
       for (const model of MODELS) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${ek}`;
         const r = await fetch(url, {
@@ -1158,14 +1167,13 @@ function ScreenshotImport({onImport, onUpdateInvestment}) {
           })
         });
         if (r.ok) { ok = true; break; }
-        if (r.status === 404 || r.status === 400 || r.status === 429) continue;
         const e = await r.json().catch(()=>({}));
         const raw = e?.error?.message || '';
         if (r.status === 401 || r.status === 403) {
-          setKeyErrMsg(`מפתח לא תקין (${r.status}) — ודא שהמפתח הוא מ-aistudio.google.com`);
+          setKeyErrMsg(`מפתח לא תקין (${r.status}): ${raw||'ודא שהמפתח הוא מ-aistudio.google.com'}`);
           setKeyStatus('error'); setKeyTesting(false); return;
         }
-        setKeyErrMsg(`שגיאה ${r.status}: ${raw}`); setKeyStatus('error'); setKeyTesting(false); return;
+        lastTestErr = `${model} → ${r.status}${raw?' ('+raw+')':''}`;
       }
       if (ok) {
         lsSet(LS.GEMINI, key);
@@ -1175,7 +1183,7 @@ function ScreenshotImport({onImport, onUpdateInvestment}) {
         setKeyStatus('ok');
         setKeyErrMsg('');
       } else {
-        setKeyErrMsg('לא נמצא מודל זמין — ודא שה-Gemini API מופעל ב-aistudio.google.com');
+        setKeyErrMsg(`לא נמצא מודל זמין. שגיאה: ${lastTestErr||'בדוק שה-Gemini API מופעל'}`);
         setKeyStatus('error');
       }
     } catch(e) {
@@ -1189,11 +1197,11 @@ function ScreenshotImport({onImport, onUpdateInvestment}) {
     if (!apiKey) return;
     setKeyTesting(true); setKeyStatus(null); setKeyErrMsg('');
     try {
-      const FALLBACK2 = ['gemini-2.5-flash','gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash','gemini-1.5-pro'];
+      const FALLBACK2 = ['gemini-2.5-flash','gemini-2.5-pro'];
       const dynamic2 = await listGeminiModels(apiKey).catch(()=>null);
       const MODELS2 = (dynamic2 && dynamic2.length) ? dynamic2 : FALLBACK2;
       const ek2 = encodeURIComponent(apiKey);
-      let ok = false;
+      let ok = false; let lastErr2 = '';
       for (const model of MODELS2) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${ek2}`;
         const r = await fetch(url, {
@@ -1205,13 +1213,15 @@ function ScreenshotImport({onImport, onUpdateInvestment}) {
           })
         });
         if (r.ok) { ok = true; break; }
-        if (r.status === 404 || r.status === 400 || r.status === 429) continue;
         const e = await r.json().catch(()=>({}));
         const raw = e?.error?.message || '';
-        setKeyErrMsg(`שגיאה ${r.status}: ${raw}`); setKeyStatus('error'); setKeyTesting(false); return;
+        if (r.status === 401 || r.status === 403) {
+          setKeyErrMsg(`מפתח לא תקין (${r.status}): ${raw}`); setKeyStatus('error'); setKeyTesting(false); return;
+        }
+        lastErr2 = `${model} → ${r.status}${raw?' ('+raw+')':''}`;
       }
       if (ok) { setKeyStatus('ok'); }
-      else { setKeyErrMsg('לא נמצא מודל זמין — ודא שה-Gemini API מופעל'); setKeyStatus('error'); }
+      else { setKeyErrMsg(`לא נמצא מודל זמין. שגיאה: ${lastErr2||'לא ידוע'}`); setKeyStatus('error'); }
     } catch(e) {
       setKeyErrMsg('שגיאת רשת: ' + e.message); setKeyStatus('error');
     }
