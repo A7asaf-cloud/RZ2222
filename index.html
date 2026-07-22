@@ -2030,7 +2030,7 @@ function PortfolioSection() {
   },[form.symbol, apiKey]);
 
   async function saveKey(){
-    const k=keyInput.trim(); if(!k) return;
+    const k=keyInput.replace(/[^a-zA-Z0-9]/g,'').trim(); if(!k) return;
     // Test the key with a known liquid stock before saving
     setFetching(true); setFetchErr(null);
     try {
@@ -2042,7 +2042,7 @@ function PortfolioSection() {
     } catch(e) {
       setFetching(false);
       const msg = String(e.message||e);
-      setFetchErr(`⛔ שגיאה: ${msg}`);
+      setFetchErr(`⛔ שגיאה: ${msg} | מפתח שנשלח: ...${k.slice(-6)}`);
     }
   }
   function clearKey(){lsSet(LS.FINNHUB,'');setApiKey('');setLiveMode(false);setLivePrices({});setDayChanges({});}
