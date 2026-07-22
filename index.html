@@ -2046,8 +2046,9 @@ function PortfolioSection() {
       setFetching(false);
       const msg = String(e.message||e);
       setFetchErr(
-        msg.includes('401')||msg.includes('403') ? '⛔ מפתח שגוי — בדוק שהעתקת נכון מ-finnhub.io'
-        : `⛔ שגיאה בבדיקת המפתח: ${msg}`
+        msg.includes('401') ? '⛔ שגיאה 401 — המפתח לא תקין. צור מפתח חדש ב-finnhub.io → Dashboard → API Key'
+        : msg.includes('403') ? '⛔ שגיאה 403 — אין הרשאה. ודא שחשבונך מאומת ב-finnhub.io'
+        : `⛔ שגיאה: ${msg}`
       );
     }
   }
