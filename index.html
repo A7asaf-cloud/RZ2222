@@ -2042,10 +2042,7 @@ function PortfolioSection() {
     } catch(e) {
       setFetching(false);
       const msg = String(e.message||e);
-      setFetchErr(
-        msg.includes('401')||msg.includes('403') ? '⛔ מפתח שגוי — בדוק שהעתקת נכון מ-finnhub.io'
-        : `⛔ שגיאה בבדיקת המפתח: ${msg}`
-      );
+      setFetchErr(`⛔ שגיאה: ${msg}`);
     }
   }
   function clearKey(){lsSet(LS.FINNHUB,'');setApiKey('');setLiveMode(false);setLivePrices({});setDayChanges({});}
