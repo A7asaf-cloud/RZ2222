@@ -2030,7 +2030,7 @@ function PortfolioSection() {
   },[form.symbol, apiKey]);
 
   async function saveKey(){
-    const k=keyInput.replace(/[^a-zA-Z0-9]/g,'').trim(); if(!k) return;
+    const k=keyInput.trim(); if(!k) return;
     // Test the key with a known liquid stock before saving
     setFetching(true); setFetchErr(null);
     try {
@@ -2161,6 +2161,7 @@ function PortfolioSection() {
             <input value={keyInput} onChange={e=>setKeyInput(e.target.value)}
                    onKeyDown={e=>e.key==='Enter'&&saveKey()}
                    placeholder="c_xxxxxxxxxxxxxxxxxxxxxxxx"
+                   autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false"
                    style={{flex:1,background:'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.3)',
                            borderRadius:12,padding:'12px 14px',color:'white',fontSize:14,
                            direction:'ltr',fontFamily:'monospace',outline:'none'}}
@@ -2212,7 +2213,8 @@ function PortfolioSection() {
             <input className="input" placeholder="c_xxxxxxxxxxxxxxxx" value={keyInput}
                    onChange={e=>setKeyInput(e.target.value)}
                    onKeyDown={e=>e.key==='Enter'&&saveKey()}
-                   style={{flex:1,direction:'ltr',fontFamily:'monospace',fontSize:13}} autoFocus/>
+                   style={{flex:1,direction:'ltr',fontFamily:'monospace',fontSize:13}}
+                   autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" autoFocus/>
             <button className="btn-primary" onClick={saveKey} style={{width:'auto',padding:'12px 16px'}}>שמור</button>
             <button className="btn-secondary" onClick={()=>setShowKey(false)} style={{width:'auto',padding:'12px 12px'}}>✕</button>
           </div>
