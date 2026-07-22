@@ -1195,7 +1195,14 @@ function ScreenshotImport({onImport, onUpdateInvestment}) {
       setProg('');
       setStage('preview');
     } catch(e) {
-      setErr('שגיאה: ' + e.message);
+      const msg = e.message || '';
+      if (msg.includes('לא תקין') || msg.includes('401') || msg.includes('403')) {
+        lsSet(LS.GEMINI, '');
+        setApiKey('');
+        setErr('מפתח Gemini לא תקין (401) — הוא נמחק. צור מפתח חדש ב-aistudio.google.com ← "Get API key"');
+      } else {
+        setErr('שגיאה: ' + msg);
+      }
       setStage('preview');
     }
   }
