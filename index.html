@@ -1912,7 +1912,7 @@ async function fetchFinnhubQuote(symbol, apiKey) {
   if (!key) throw new Error('אין מפתח API');
   if (!sym) throw new Error('אין סימבול');
   const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${encodeURIComponent(key)}`;
-  const r = await fetch(url, { headers: { 'X-Finnhub-Token': key } });
+  const r = await fetch(url);
   if (!r.ok) {
     let detail = '';
     try { const e = await r.json(); detail = e?.error || ''; } catch {}
