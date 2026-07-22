@@ -1008,20 +1008,26 @@ function extractJSONFromText(text) {
   return JSON.parse(text);
 }
 
+async function listGeminiModels(apiKey) {
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}&pageSize=50`);
+  if (!r.ok) return null;
+  const d = await r.json();
+  return (d.models || [])
+    .filter(m => m.supportedGenerationMethods?.includes('generateContent') && m.name.includes('flash') || m.name.includes('pro'))
+    .map(m => m.name.replace('models/', ''))
+    .sort((a,b) => (b.includes('2.0')||b.includes('2.5')?1:0) - (a.includes('2.0')||a.includes('2.5')?1:0));
+}
+
 async function callGemini(file, docType, apiKey) {
   if (!apiKey) throw new Error('לא הוגדר מפתח API');
 
   const { data, mime } = await fileToBase64(file);
 
-  const models = [
-    'gemini-2.0-flash-lite',
-    'gemini-2.0-flash',
-    'gemini-2.0-flash-exp',
-    'gemini-1.5-flash',
-    'gemini-1.5-flash-latest',
-    'gemini-1.5-flash-8b',
-    'gemini-1.5-pro',
-  ];
+  // Get available models dynamically, fall back to known list
+  const FALLBACK = ['gemini-2.5-flash','gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash','gemini-1.5-pro'];
+  const dynamic = await listGeminiModels(apiKey).catch(()=>null);
+  const models = (dynamic && dynamic.length) ? dynamic : FALLBACK;
+
   let lastErr = null;
 
   for (const model of models) {
@@ -1123,7 +1129,9 @@ function ScreenshotImport({onImport, onUpdateInvestment}) {
     if (!key) return;
     setKeyTesting(true); setKeyStatus(null); setKeyErrMsg('');
     try {
-      const MODELS = ['gemini-2.0-flash-lite','gemini-2.0-flash','gemini-2.0-flash-exp','gemini-1.5-flash','gemini-1.5-flash-latest','gemini-1.5-flash-8b','gemini-1.5-pro'];
+      const FALLBACK = ['gemini-2.5-flash','gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash','gemini-1.5-pro'];
+      const dynamic = await listGeminiModels(key).catch(()=>null);
+      const MODELS = (dynamic && dynamic.length) ? dynamic : FALLBACK;
       let ok = false;
       for (const model of MODELS) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
@@ -1153,7 +1161,7 @@ function ScreenshotImport({onImport, onUpdateInvestment}) {
         setKeyStatus('ok');
         setKeyErrMsg('');
       } else {
-        setKeyErrMsg('לא נמצא מודל זמין — ודא שה-API מופעל בחשבון');
+        setKeyErrMsg('לא נמצא מודל זמין — ודא שה-Gemini API מופעל ב-aistudio.google.com');
         setKeyStatus('error');
       }
     } catch(e) {
@@ -1167,9 +1175,11 @@ function ScreenshotImport({onImport, onUpdateInvestment}) {
     if (!apiKey) return;
     setKeyTesting(true); setKeyStatus(null); setKeyErrMsg('');
     try {
-      const MODELS = ['gemini-2.0-flash-lite','gemini-2.0-flash','gemini-2.0-flash-exp','gemini-1.5-flash','gemini-1.5-flash-latest','gemini-1.5-flash-8b','gemini-1.5-pro'];
+      const FALLBACK2 = ['gemini-2.5-flash','gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash','gemini-1.5-pro'];
+      const dynamic2 = await listGeminiModels(apiKey).catch(()=>null);
+      const MODELS2 = (dynamic2 && dynamic2.length) ? dynamic2 : FALLBACK2;
       let ok = false;
-      for (const model of MODELS) {
+      for (const model of MODELS2) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
         const r = await fetch(url, {
           method:'POST',
@@ -1186,7 +1196,7 @@ function ScreenshotImport({onImport, onUpdateInvestment}) {
         setKeyErrMsg(`שגיאה ${r.status}: ${raw}`); setKeyStatus('error'); setKeyTesting(false); return;
       }
       if (ok) { setKeyStatus('ok'); }
-      else { setKeyErrMsg('לא נמצא מודל זמין — ודא שה-API מופעל בחשבון'); setKeyStatus('error'); }
+      else { setKeyErrMsg('לא נמצא מודל זמין — ודא שה-Gemini API מופעל'); setKeyStatus('error'); }
     } catch(e) {
       setKeyErrMsg('שגיאת רשת: ' + e.message); setKeyStatus('error');
     }
