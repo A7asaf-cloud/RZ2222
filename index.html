@@ -1002,7 +1002,6 @@ function extractJSONFromText(text) {
 
 async function callGemini(file, docType, apiKey) {
   if (!apiKey) throw new Error('לא הוגדר מפתח API');
-  if (!apiKey.startsWith('AIza')) throw new Error('מפתח לא תקין — חייב להתחיל ב-AIza. קבל מפתח נכון מ-aistudio.google.com/apikey');
 
   const { data, mime } = await fileToBase64(file);
 
@@ -1111,10 +1110,6 @@ function ScreenshotImport({onImport, onUpdateInvestment}) {
   async function testAndSaveKey() {
     const key = keyInput.replace(/[^\x20-\x7E]/g,'').trim();
     if (!key) return;
-    if (!key.startsWith('AIza')) {
-      setKeyErrMsg('מפתח לא תקין — חייב להתחיל ב-AIza. קבל מפתח ב-aistudio.google.com/apikey');
-      setKeyStatus('error'); return;
-    }
     setKeyTesting(true); setKeyStatus(null); setKeyErrMsg('');
     try {
       const models = ['gemini-1.5-flash','gemini-2.0-flash','gemini-1.5-flash-latest'];
