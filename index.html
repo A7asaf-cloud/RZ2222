@@ -1907,8 +1907,12 @@ function ImportTab({onImport, onUpdateInv}) {
 /* ── LIVE PRICE HELPERS ── */
 /* ── Finnhub: מחירי מניות חיים (דורש מפתח חינמי מ-finnhub.io) ── */
 async function fetchFinnhubQuote(symbol, apiKey) {
-  const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${encodeURIComponent(apiKey)}`;
-  const r = await fetch(url, { headers: { 'X-Finnhub-Token': apiKey } });
+  const key = String(apiKey || '').trim();
+  const sym = String(symbol || '').trim();
+  if (!key) throw new Error('אין מפתח API');
+  if (!sym) throw new Error('אין סימבול');
+  const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${encodeURIComponent(key)}`;
+  const r = await fetch(url, { headers: { 'X-Finnhub-Token': key } });
   if (!r.ok) {
     let detail = '';
     try { const e = await r.json(); detail = e?.error || ''; } catch {}
