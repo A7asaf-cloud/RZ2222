@@ -974,8 +974,11 @@ Rules: negative amount = expense/debit, positive = income/credit. Include every 
 
   stocks: `Extract all stock/ETF holdings from this brokerage portfolio screenshot.
 Return ONLY valid JSON array (no markdown):
-[{"symbol":"TICKER","name":"Company Name","shares":number,"price":number}]
-Use the average cost or purchase price for 'price'. If only current value shown, use that for price.`,
+[{"symbol":"TICKER","name":"Company Name","shares":number,"avgCost":number,"currentPrice":number}]
+- avgCost = average purchase/cost price per share (what was paid, NOT current value)
+- currentPrice = current market price per share
+- If only one price is visible, use it for both fields.
+- Do NOT confuse total value with per-share price.`,
 
   keren: `Extract the total current fund value (שווי/יתרה) and YTD return percentage (תשואה) from this קרן השתלמות / גמל statement.
 Return ONLY valid JSON (no markdown): {"value":number,"ytd":number}
@@ -1274,7 +1277,11 @@ function ScreenshotImport({onImport, onUpdateInvestment}) {
       });
       if(txs.length>0||manual.length>0){ onImport([...txs,...manual]); setStage('done'); }
     } else if(docType==='stocks') {
-      const holdings = Array.isArray(result) ? result : [];
+      const holdings = (Array.isArray(result) ? result : []).map(h=>({
+        ...h,
+        avgCost: h.avgCost ?? h.price ?? 0,
+        currentPrice: h.currentPrice ?? h.price ?? h.avgCost ?? 0,
+      }));
       if(onUpdateInvestment) onUpdateInvestment({type:'stocks', holdings});
       setStage('done');
     } else {
@@ -1508,7 +1515,9 @@ function ScreenshotImport({onImport, onUpdateInvestment}) {
                 // use manual rows
                 const h=rows.filter(r=>r.symbol&&r.shares).map(r=>({
                   symbol:r.symbol.toUpperCase(),name:r.name||r.symbol.toUpperCase(),
-                  shares:parseFloat(r.shares)||0,price:parseFloat(r.price)||0
+                  shares:parseFloat(r.shares)||0,
+                  avgCost:parseFloat(r.avgCost||r.price)||0,
+                  currentPrice:parseFloat(r.currentPrice||r.price||r.avgCost)||0,
                 }));
                 if(h.length>0&&onUpdateInvestment){onUpdateInvestment({type:'stocks',holdings:h});setStage('done');}
               } else {
